@@ -66,7 +66,7 @@ const fetchPage = async (page, pool) => {
     console.error(`Ошибка при загрузке страницы ${page}:`, error.message);
   }
 };
-
+//Bltv gj gthcjyf;fv
 const fetchCharacters = async (pool, pagesAtOnce) => {
   try {
     const initialResponse = await axios.get(
@@ -128,4 +128,4 @@ const main = async (maxConnections, pagesAtOnce, mode) => {
 };
 
 //  Поехали!!!! Подбирается имперически
-main(60,30, "debug"); // или 'release'
+main(60,30, "release"); // или 'release'
