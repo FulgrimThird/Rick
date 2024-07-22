@@ -1,19 +1,27 @@
-const axios = require('axios');
-const { Pool } = require('pg');
+"use strict";
+const fs = require("fs");
+const { Pool } = require("pg");
+const axios = require("axios");
 
+// Настройки Яндекса
+const prodConfig = {
+  connectionString:
+    "postgres://candidate:62I8anq3cFq5GYh2u4Lh@rc1b-r21uoagjy1t7k77h.mdb.yandexcloud.net:6432/db1",
+  ssl: {
+    rejectUnauthorized: true,
+    ca: fs.readFileSync("/home/runner/.postgresql/root.crt").toString(),
+  },
+};
 
-const MAX_CONNECTIONS = 50;  //Соединений в пуле
-const PAGES_AT_ONCE = 10;   //Страниц за раз
-
-const pool = new Pool({
-   user: "Rick",
-   host: "194.120.116.148",
-   database: "Rick",
+// Настройки для тестовой базы данных
+const debugConfig = {
+  user: "Rick",
+  host: "194.120.116.148",
+  database: "Rick",
   password: "qweasdzxc",
-  max:  MAX_CONNECTIONS,                     
-});
-
-const tableName = 'tt111';
+};
+// Имя Таблици
+const tableName = "FulgrimThird"; 
 
 const createTableQuery = `
   CREATE TABLE IF NOT EXISTS ${tableName} (
@@ -22,8 +30,8 @@ const createTableQuery = `
     data JSONB
   );
 `;
-
-const insertCharacters = async (characters) => {
+//Вставляем данные в таблицу
+const insertCharacters = async (characters, pool, logShow) => {
   const client = await pool.connect();
   const insertQuery = `INSERT INTO ${tableName} (name, data) VALUES ($1, $2)`;
   const values = characters.map(character => [character.name, character]);
@@ -35,7 +43,10 @@ const insertCharacters = async (characters) => {
     );
     await Promise.all(promises);
     await client.query('COMMIT');
-   // values.forEach(([name]) => console.log(`Персонаж добавлен в базу: ${name}`));
+
+    if (logShow) {
+      values.forEach(([name]) => console.log(`Персонаж добавлен в базу данных: ${name}`));
+    }
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Ошибка при вставке данных:', err.message);
@@ -43,20 +54,24 @@ const insertCharacters = async (characters) => {
     client.release();
   }
 };
-
-const fetchPage = async (page) => {
+// Получаем страницы
+const fetchPage = async (page, pool) => {
   try {
-    const response = await axios.get(`https://rickandmortyapi.com/api/character/?page=${page}`);
+    const response = await axios.get(
+      `https://rickandmortyapi.com/api/character/?page=${page}`,
+    );
     const characters = response.data.results;
-    await insertCharacters(characters);
+    await insertCharacters(characters, pool,false);
   } catch (error) {
     console.error(`Ошибка при загрузке страницы ${page}:`, error.message);
   }
 };
 
-const fetchCharacters = async () => {
+const fetchCharacters = async (pool, pagesAtOnce) => {
   try {
-    const initialResponse = await axios.get(`https://rickandmortyapi.com/api/character/`);
+    const initialResponse = await axios.get(
+      `https://rickandmortyapi.com/api/character/`,
+    );
     const totalPages = initialResponse.data.info.pages;
 
     let page = 1;
@@ -64,8 +79,8 @@ const fetchCharacters = async () => {
 
     while (page <= totalPages) {
       const tasks = [];
-      for (let i = 0; i < PAGES_AT_ONCE && page <= totalPages; i++, page++) {
-        tasks.push(fetchPage(page));
+      for (let i = 0; i < pagesAtOnce && page <= totalPages; i++, page++) {
+        tasks.push(fetchPage(page, pool));
       }
       pageGroups.push(Promise.all(tasks));
     }
@@ -74,32 +89,43 @@ const fetchCharacters = async () => {
     await Promise.all(pageGroups);
     const endTime = Date.now();
 
-    console.log(`Данные успешно загружены в таблицу ${tableName}`);
-    console.log(`Время выполнения: ${(endTime - startTime) / 1000} секунд`);
+    console.log(`Данные успешно загружены`);
+    console.log(
+      `Время: ${(endTime - startTime) / 1000} секунд`,
+    );
   } catch (error) {
-    console.error('Ошибка при загрузке данных:', error.message);
+    console.error("Ошибка при загрузке данных:", error.message);
   } finally {
     pool.end((err) => {
       if (err) {
-        console.error('Ошибка при закрытии соединения с базой данных:', err.message);
+        console.error(
+          "Ошибка при закрытия соединения с базой:",
+          err.message,
+        );
       } else {
-        console.log('Соединение с базой данных успешно закрыто.');
+        console.log("Соединение с базой закрыто.");
       }
     });
   }
 };
-
-const main = async () => {
+//Main и в Африке Main mode дебаг-моя база, релиз - боевая
+const main = async (maxConnections, pagesAtOnce, mode) => {
+  const config =
+    mode === "release"
+      ? { ...prodConfig, max: maxConnections }
+      : { ...debugConfig, max: maxConnections };
+  const pool = new Pool(config);
   const client = await pool.connect();
   try {
     await client.query(createTableQuery);
-    console.log('Таблица успешно создана или уже существует.');
-    await fetchCharacters();
+    console.log("Таблица успешно создана или уже существует.");
+    await fetchCharacters(pool, pagesAtOnce);
   } catch (err) {
-    console.error('Ошибка при создании таблицы:', err.message);
+    console.error("Ошибка при создании таблицы:", err.message);
   } finally {
     client.release();
   }
 };
 
-main();
+//  Поехали!!!! Подбирается имперически
+main(60,30, "debug"); // или 'release'
