@@ -128,4 +128,4 @@ const main = async (maxConnections, pagesAtOnce, mode) => {
 };
 
 //  Поехали!!!! Подбирается имперически
-main(60,30, "release"); // или 'release'
+main(60,20, "release"); // или 'release'
